@@ -63,7 +63,7 @@ public class FraudDetectionService {
         List<Transaction> recent = transactionService.getRecentTransactions(accountId, 10);
         long frequency = transactionService.countTransactionsInLastHour(accountId);
 
-        FraudAnalysisResult result = callClaudeApi(account, transaction, recent, frequency);
+        FraudAnalysisResult result = callGroqApi(account, transaction, recent, frequency);
         applyRiskActions(accountId, transaction.getTransactionId(), result);
         return result;
     }
@@ -84,7 +84,7 @@ public class FraudDetectionService {
         List<Transaction> recent = transactionService.getRecentTransactions(accountId, 10);
         long frequency = transactionService.countTransactionsInLastHour(accountId);
 
-        FraudAnalysisResult result = callClaudeApi(account, transaction, recent, frequency);
+        FraudAnalysisResult result = callGroqApi(account, transaction, recent, frequency);
         applyRiskActions(accountId, transactionId, result);
         return result;
     }
@@ -93,44 +93,44 @@ public class FraudDetectionService {
         return new ArrayList<>(fraudAlerts);
     }
 
-    private FraudAnalysisResult callClaudeApi(Account account, Transaction transaction,
-                                              List<Transaction> recentHistory, long txCountLastHour)
+    private FraudAnalysisResult callGroqApi(Account account, Transaction transaction,
+                                            List<Transaction> recentHistory, long txCountLastHour)
             throws BankingException {
         JSONObject context = JsonUtils.buildFraudContext(account, transaction, recentHistory, txCountLastHour);
         String prompt = buildPrompt(context);
 
-        if (ApiConfig.CLAUDE_API_KEY == null
-                || ApiConfig.CLAUDE_API_KEY.isBlank()
-                || "your-api-key-here".equals(ApiConfig.CLAUDE_API_KEY)) {
-            System.out.println("[FraudDetection] No API key configured — using heuristic fallback.");
+        if (ApiConfig.GROQ_API_KEY == null
+                || ApiConfig.GROQ_API_KEY.isBlank()
+                || "your-groq-key-here".equals(ApiConfig.GROQ_API_KEY)) {
+            System.out.println("[FraudDetection] No Groq API key configured — using heuristic fallback.");
             return heuristicFallback(transaction, txCountLastHour);
         }
 
         try {
             JSONObject requestBody = new JSONObject();
-            requestBody.put("model", ApiConfig.CLAUDE_MODEL);
+            requestBody.put("model", ApiConfig.GROQ_MODEL);
             requestBody.put("max_tokens", 1024);
             requestBody.put("messages", new JSONArray()
                     .put(new JSONObject()
                             .put("role", "user")
                             .put("content", prompt)));
+            requestBody.put("response_format", new JSONObject().put("type", "json_object"));
 
             HttpRequest request = HttpRequest.newBuilder()
-                    .uri(URI.create(ApiConfig.CLAUDE_API_URL))
+                    .uri(URI.create(ApiConfig.GROQ_API_URL))
                     .header("Content-Type", "application/json")
-                    .header("x-api-key", ApiConfig.CLAUDE_API_KEY)
-                    .header("anthropic-version", ApiConfig.ANTHROPIC_VERSION)
+                    .header("Authorization", "Bearer " + ApiConfig.GROQ_API_KEY)
                     .POST(HttpRequest.BodyPublishers.ofString(requestBody.toString()))
                     .build();
 
             HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
 
             if (response.statusCode() != 200) {
-                System.err.println("[FraudDetection] Claude API error " + response.statusCode() + ": " + response.body());
+                System.err.println("[FraudDetection] Groq API error " + response.statusCode() + ": " + response.body());
                 return heuristicFallback(transaction, txCountLastHour);
             }
 
-            return parseClaudeResponse(response.body());
+            return parseGroqResponse(response.body());
         } catch (Exception e) {
             System.err.println("[FraudDetection] API call failed: " + e.getMessage());
             return heuristicFallback(transaction, txCountLastHour);
@@ -161,16 +161,16 @@ public class FraudDetectionService {
                         .toString(2));
     }
 
-    private FraudAnalysisResult parseClaudeResponse(String responseBody) {
+    private FraudAnalysisResult parseGroqResponse(String responseBody) {
         try {
             JSONObject response = new JSONObject(responseBody);
-            JSONArray content = response.getJSONArray("content");
-            String text = content.getJSONObject(0).getString("text");
+            JSONArray choices = response.getJSONArray("choices");
+            String text = choices.getJSONObject(0).getJSONObject("message").getString("content");
 
             JSONObject analysisJson = extractJsonFromText(text);
             return FraudAnalysisResult.fromJson(analysisJson);
         } catch (Exception e) {
-            System.err.println("[FraudDetection] Failed to parse Claude response: " + e.getMessage());
+            System.err.println("[FraudDetection] Failed to parse Groq response: " + e.getMessage());
             return FraudAnalysisResult.safeDefault();
         }
     }
