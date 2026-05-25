@@ -1,0 +1,39 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+body {
+  @apply bg-vault-bg font-sans text-white antialiased;
+  margin: 0;
+}
+
+.material-symbols-outlined {
+  font-variation-settings: "FILL" 0, "wght" 400, "GRAD" 0, "opsz" 24;
+  vertical-align: middle;
+}
+
+@layer utilities {
+  .glass {
+    background: rgba(255, 255, 255, 0.05);
+    backdrop-filter: blur(12px);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+  }
+
+  .ghost-stat {
+    @apply pointer-events-none absolute -right-2 -top-4 select-none text-6xl font-black text-white/5;
+  }
+
+  .flagged-row {
+    @apply bg-vault-flagged transition-shadow duration-300;
+  }
+
+  .flagged-row:hover {
+    box-shadow: 0 0 24px rgba(255, 45, 107, 0.35);
+  }
+
+  .shimmer-border {
+    background: linear-gradient(90deg, #ff2d6b22, #ff2d6b, #ff6bc4, #ff2d6b22);
+    background-size: 200% 100%;
+    animation: shimmer 2.5s linear infinite;
+  }
+}
